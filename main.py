@@ -39,36 +39,31 @@ async def on_message(message):
     now = time.time()
     content = message.content
 
-    spam_detected = False
-
     # ------------------------------
-    # 文字が5回以上出現
-    # ------------------------------
-    if has_repeated_char(content, 5):
-        spam_detected = True
-
-    # ------------------------------
-    # 連投（5秒以内に3回以上）
+    # メッセージ履歴更新
     # ------------------------------
     message_history[user_id].append(now)
+    # 古い履歴を削除
     message_history[user_id] = [t for t in message_history[user_id] if now - t <= 3]
-    if len(message_history[user_id]) >= 5:
-        spam_detected = True
 
     # ------------------------------
-    # スパム検出時
+    # スパム判定（文字5回以上 OR 3秒以内に5回連投）
     # ------------------------------
+    spam_detected = has_repeated_char(content, 5) or len(message_history[user_id]) >= 5
+
     if spam_detected:
+        # ------------------------------
         # メッセージ削除
+        # ------------------------------
         try:
             await message.delete()
         except (discord.Forbidden, discord.NotFound):
             pass
 
-        # 警告は1回だけ出す
-        count = warning_count[user_id]
-
-        if count == 0:
+        # ------------------------------
+        # 警告・タイムアウト処理
+        # ------------------------------
+        if warning_count[user_id] == 0:
             # 1回目警告
             warning_count[user_id] = 1
             await message.channel.send(
@@ -88,7 +83,7 @@ async def on_message(message):
                 await message.channel.send(
                     f"⚠️ {member.mention} タイムアウトに失敗しました。権限を確認してください。"
                 )
-        return  # ここで必ず return して二重警告を防ぐ
+        return  # ここで処理を終えて二重警告を防ぐ
 
     await bot.process_commands(message)
 
