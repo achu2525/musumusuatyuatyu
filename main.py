@@ -2,8 +2,8 @@ import discord
 from discord.ext import commands
 import time
 import os
-import datetime
 from collections import defaultdict
+import datetime
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -15,9 +15,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ユーザー管理
 message_history = defaultdict(list)  # {user_id: [timestamps]}
 warning_count = defaultdict(int)     # {user_id: 警告回数}
-timeout_users = {}                   # {user_id: timeout終了時刻}
 
-TIMEOUT_DURATION = 300  # 秒 (5分)
+TIMEOUT_DURATION = 300  # 5分
 
 def has_repeated_char(content, threshold=5):
     """
@@ -45,28 +44,13 @@ async def on_message(message):
     spam_detected = False
 
     # ------------------------------
-    # タイムアウト中のユーザーはメッセージ削除のみ
-    # ------------------------------
-    if user_id in timeout_users:
-        if now < timeout_users[user_id]:
-            try:
-                await message.delete()
-            except (discord.NotFound, discord.Forbidden):
-                pass
-            return
-        else:
-            # タイムアウト終了
-            del timeout_users[user_id]
-            warning_count[user_id] = 0
-
-    # ------------------------------
-    # 文字が5回以上出現
+    # ① 文字が5文字以上出現
     # ------------------------------
     if has_repeated_char(content, 5):
         spam_detected = True
 
     # ------------------------------
-    # 連投（5秒以内に3回以上）
+    # ② 連投（5秒以内に3回以上）
     # ------------------------------
     message_history[user_id].append(now)
     message_history[user_id] = [t for t in message_history[user_id] if now - t <= 5]
@@ -74,9 +58,10 @@ async def on_message(message):
         spam_detected = True
 
     if spam_detected:
+        # メッセージ削除
         try:
             await message.delete()
-        except (discord.NotFound, discord.Forbidden):
+        except (discord.Forbidden, discord.NotFound):
             pass
 
         count = warning_count[user_id]
@@ -90,11 +75,9 @@ async def on_message(message):
         else:
             # 2回目 → Discord タイムアウト
             warning_count[user_id] = 0
-            timeout_users[user_id] = now + TIMEOUT_DURATION
             member = message.author
             try:
-                timeout_until = datetime.datetime.utcnow() + datetime.timedelta(seconds=TIMEOUT_DURATION)
-                await member.edit(communication_disabled_until=timeout_until)
+                await member.timeout(datetime.timedelta(seconds=TIMEOUT_DURATION))
                 await message.channel.send(f"⚠️ {member.mention} 5分間タイムアウトです！")
             except discord.Forbidden:
                 await message.channel.send(
