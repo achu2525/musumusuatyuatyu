@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import time
 import os
+import re
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -13,7 +14,7 @@ message_history = {}   # {user_id: [timestamps]}
 warning_count = {}     # {user_id: 警告回数}
 timeout_users = {}     # {user_id: timeout_end_timestamp}
 
-TIMEOUT_DURATION = 180  # 秒 (3分)
+TIMEOUT_DURATION = 300  # 秒 (5分)
 
 @bot.event
 async def on_ready():
@@ -34,7 +35,7 @@ async def on_message(message):
         if now < timeout_users[user_id]:
             try:
                 await message.delete()
-            except discord.Forbidden:
+            except (discord.Forbidden, discord.NotFound):
                 pass
             return
         else:
@@ -43,18 +44,16 @@ async def on_message(message):
             warning_count[user_id] = 0  # 警告リセット
 
     content = message.content
-
-    # ------------------------------
-    # ① 同じ文字が5文字以上
-    # ------------------------------
     spam_detected = False
-    for char in set(content):
-        if content.count(char) >= 5:
-            spam_detected = True
-            break
 
     # ------------------------------
-    # ② 連投（5秒以内に3回）
+    # ① 同じ文字が5文字以上連続
+    # ------------------------------
+    if re.search(r'(.)\1{4,}', content):
+        spam_detected = True
+
+    # ------------------------------
+    # ② 連投（5秒以内に3回以上）
     # ------------------------------
     if user_id not in message_history:
         message_history[user_id] = []
@@ -66,7 +65,7 @@ async def on_message(message):
     if spam_detected:
         try:
             await message.delete()
-        except discord.Forbidden:
+        except (discord.Forbidden, discord.NotFound):
             pass
 
         count = warning_count.get(user_id, 0)
@@ -74,15 +73,16 @@ async def on_message(message):
         if count == 0:
             # 一回目の警告
             warning_count[user_id] = 1
-            if len(content) >= 5:
-                await message.channel.send(f"⚠️ {message.author.mention} 文字が多すぎます！次にスパムを行うと3分間のタイムアウトです！")
-            else:
-                await message.channel.send(f"⚠️ {message.author.mention} 連投が多すぎます！ 次にスパムを行うと3分間のタイムアウトです！")
+            await message.channel.send(
+                f"⚠️ {message.author.mention} 次にスパムを行うと5分間のタイムアウトです！"
+            )
         else:
             # 二回目でタイムアウト
             timeout_users[user_id] = now + TIMEOUT_DURATION
             warning_count[user_id] = 0  # リセット
-            await message.channel.send(f"⚠️ {message.author.mention} 3分間タイムアウトです！")
+            await message.channel.send(
+                f"⚠️ {message.author.mention} 5分間タイムアウトです！"
+            )
         return
 
     await bot.process_commands(message)
