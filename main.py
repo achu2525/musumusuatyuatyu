@@ -15,8 +15,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ユーザー管理
 message_history = defaultdict(list)  # {user_id: [timestamps]}
 warning_count = defaultdict(int)     # {user_id: 警告回数}
+timeout_users = {}                   # {user_id: timeout終了時刻}
 
-TIMEOUT_DURATION = 300  # 5分
+TIMEOUT_DURATION = 300  # 秒 (5分)
 
 def has_repeated_char(content, threshold=5):
     """
@@ -44,13 +45,28 @@ async def on_message(message):
     spam_detected = False
 
     # ------------------------------
-    # ① 文字が5文字以上出現
+    # タイムアウト中のユーザーはメッセージ削除のみ
+    # ------------------------------
+    if user_id in timeout_users:
+        if now < timeout_users[user_id]:
+            try:
+                await message.delete()
+            except (discord.NotFound, discord.Forbidden):
+                pass
+            return
+        else:
+            # タイムアウト終了
+            del timeout_users[user_id]
+            warning_count[user_id] = 0
+
+    # ------------------------------
+    # 文字が5回以上出現
     # ------------------------------
     if has_repeated_char(content, 5):
         spam_detected = True
 
     # ------------------------------
-    # ② 連投（5秒以内に3回以上）
+    # 連投（5秒以内に3回以上）
     # ------------------------------
     message_history[user_id].append(now)
     message_history[user_id] = [t for t in message_history[user_id] if now - t <= 5]
@@ -60,7 +76,7 @@ async def on_message(message):
     if spam_detected:
         try:
             await message.delete()
-        except (discord.Forbidden, discord.NotFound):
+        except (discord.NotFound, discord.Forbidden):
             pass
 
         count = warning_count[user_id]
@@ -74,6 +90,7 @@ async def on_message(message):
         else:
             # 2回目 → Discord タイムアウト
             warning_count[user_id] = 0
+            timeout_users[user_id] = now + TIMEOUT_DURATION
             member = message.author
             try:
                 timeout_until = datetime.datetime.utcnow() + datetime.timedelta(seconds=TIMEOUT_DURATION)
