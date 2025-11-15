@@ -13,12 +13,16 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ユーザー管理
-message_history = defaultdict(list)
-warning_count = defaultdict(int)
+message_history = defaultdict(list)  # {user_id: [timestamps]}
+warning_count = defaultdict(int)     # {user_id: 警告回数}
 
 TIMEOUT_DURATION = 300  # 秒（5分）
+REPEAT_THRESHOLD = 5    # 文字連続回数
+SPAM_COUNT = 5          # 連投回数
+SPAM_INTERVAL = 3       # 秒
 
-def has_repeated_char(content, threshold=5):
+def has_repeated_char(content, threshold=REPEAT_THRESHOLD):
+    """文章内で同じ文字が threshold 回以上出現したら True"""
     counts = {}
     for c in content:
         counts[c] = counts.get(c, 0) + 1
@@ -40,29 +44,24 @@ async def on_message(message):
     content = message.content
 
     # ------------------------------
-    # メッセージ履歴更新
+    # メッセージ履歴更新（連投判定用）
     # ------------------------------
     message_history[user_id].append(now)
-    # 古い履歴を削除
-    message_history[user_id] = [t for t in message_history[user_id] if now - t <= 3]
+    message_history[user_id] = [t for t in message_history[user_id] if now - t <= SPAM_INTERVAL]
 
     # ------------------------------
-    # スパム判定（文字5回以上 OR 3秒以内に5回連投）
+    # スパム判定
     # ------------------------------
-    spam_detected = has_repeated_char(content, 5) or len(message_history[user_id]) >= 5
+    spam_detected = has_repeated_char(content) or len(message_history[user_id]) >= SPAM_COUNT
 
     if spam_detected:
-        # ------------------------------
         # メッセージ削除
-        # ------------------------------
         try:
             await message.delete()
         except (discord.Forbidden, discord.NotFound):
             pass
 
-        # ------------------------------
-        # 警告・タイムアウト処理
-        # ------------------------------
+        # 警告・タイムアウト処理（絶対に1回だけ）
         if warning_count[user_id] == 0:
             # 1回目警告
             warning_count[user_id] = 1
@@ -85,6 +84,9 @@ async def on_message(message):
                 )
         return  # ここで処理を終えて二重警告を防ぐ
 
+    # ------------------------------
+    # 通常のコマンド処理
+    # ------------------------------
     await bot.process_commands(message)
 
 bot.run(os.getenv("BOT_TOKEN"))
