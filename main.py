@@ -1,9 +1,9 @@
 import discord
 from discord.ext import commands
-import time
 import os
-import datetime
+import time
 from collections import defaultdict
+import datetime
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -17,7 +17,7 @@ message_history = defaultdict(list)  # {user_id: [timestamps]}
 warning_count = defaultdict(int)     # {user_id: 警告回数}
 timeout_users = {}                   # {user_id: timeout_end_timestamp}
 
-TIMEOUT_DURATION = 300  # 5分
+TIMEOUT_DURATION = 300  # 秒（5分）
 
 def has_repeated_char(content, threshold=5):
     """文章内で同じ文字が threshold 回以上出現したら True"""
@@ -76,6 +76,9 @@ async def on_message(message):
     if len(message_history[user_id]) >= 3:
         spam_detected = True
 
+    # ------------------------------
+    # スパム検出時
+    # ------------------------------
     if spam_detected:
         try:
             await message.delete()
@@ -91,14 +94,16 @@ async def on_message(message):
                 f"⚠️ {message.author.mention} 次にスパムを行うと5分間のタイムアウトです！"
             )
         else:
-            # 2回目 → Discord 公式タイムアウト
+            # 2回目 → Discord公式タイムアウト
             warning_count[user_id] = 0
             member = message.author
             try:
-                timeout_until = datetime.datetime.utcnow() + datetime.timedelta(seconds=TIMEOUT_DURATION)
-                await member.timeout(timeout_until)  # 位置引数で渡す
+                timeout_until = discord.utils.utcnow() + datetime.timedelta(seconds=TIMEOUT_DURATION)
+                await member.timeout(timeout_until)  # timezone aware datetime
                 timeout_users[user_id] = now + TIMEOUT_DURATION
-                await message.channel.send(f"⚠️ {member.mention} 5分間タイムアウトです！")
+                await message.channel.send(
+                    f"⚠️ {member.mention} 5分間タイムアウトです！"
+                )
             except discord.Forbidden:
                 await message.channel.send(
                     f"⚠️ {member.mention} タイムアウトに失敗しました。権限を確認してください。"
