@@ -2,10 +2,10 @@ import discord
 from discord.ext import commands
 import time
 import re
-import os  # 環境変数用
+import os  # 環境変数読み込み用
 
 intents = discord.Intents.default()
-intents.message_content = True  # Privileged Intent
+intents.message_content = True  # Privileged Intent 必須
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -22,17 +22,16 @@ async def on_message(message):
         return
 
     content = message.content
-
-    # ------ ① 同じ文字が5回以上 ------
-    if re.search(r'(.)\1{4,}', content):  # 5文字以上
-        await message.delete()
-        await message.reply("⚠️ 同じ文字の連続が多すぎます！")
-        return
-
-    # ------ ② 連投（5秒以内に3回以上） ------
     user_id = message.author.id
     now = time.time()
 
+    # ------ ① 同じ文字が5回以上 ------
+    if re.search(r'(.)\1{4,}', content):  # {4,} → 5文字以上
+        await message.delete()  # メッセージを削除
+        await message.channel.send(f"⚠️ {message.author.mention} 渓谷です！")
+        return
+
+    # ------ ② 連投（5秒以内に3回以上） ------
     if user_id not in message_history:
         message_history[user_id] = []
 
@@ -43,10 +42,9 @@ async def on_message(message):
         t for t in message_history[user_id] if now - t <= 5
     ]
 
-    # 3回以上なら警告
     if len(message_history[user_id]) >= 3:
         await message.delete()
-        await message.reply("⚠️ 連投が多すぎます！")
+        await message.channel.send(f"⚠️ {message.author.mention} 連投が多すぎます！")
 
     await bot.process_commands(message)
 
