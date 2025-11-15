@@ -34,7 +34,7 @@ async def on_message(message):
                 pass
             try:
                 await message.channel.send(
-                    f"⚠️ {message.author.mention} 渓谷です！"
+                    f"⚠️ {message.author.mention} 同じ文字が多すぎます！"
                 )
             except discord.Forbidden:
                 pass
@@ -74,3 +74,4 @@ async def on_message(message):
 
 # Bot起動
 bot.run(os.getenv("BOT_TOKEN"))
+
