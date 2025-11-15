@@ -15,7 +15,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ユーザー管理
 message_history = defaultdict(list)  # {user_id: [timestamps]}
 warning_count = defaultdict(int)     # {user_id: 警告回数}
-timeout_users = {}                   # {user_id: timeout_end_timestamp}
 
 TIMEOUT_DURATION = 300  # 秒（5分）
 
@@ -40,25 +39,6 @@ async def on_message(message):
     user_id = message.author.id
     now = time.time()
     content = message.content
-
-    # ------------------------------
-    # タイムアウト中のユーザー
-    # ------------------------------
-    if user_id in timeout_users:
-        if now < timeout_users[user_id]:
-            try:
-                await message.delete()
-            except (discord.Forbidden, discord.NotFound):
-                pass
-            await message.channel.send(
-                f"⚠️ {message.author.mention} タイムアウト中なのでしゃべれません。",
-                delete_after=5
-            )
-            return
-        else:
-            # タイムアウト終了
-            del timeout_users[user_id]
-            warning_count[user_id] = 0  # 警告リセット
 
     spam_detected = False
 
@@ -99,8 +79,7 @@ async def on_message(message):
             member = message.author
             try:
                 timeout_until = discord.utils.utcnow() + datetime.timedelta(seconds=TIMEOUT_DURATION)
-                await member.timeout(timeout_until)  # timezone aware datetime
-                timeout_users[user_id] = now + TIMEOUT_DURATION
+                await member.timeout(timeout_until)
                 await message.channel.send(
                     f"⚠️ {member.mention} 5分間タイムアウトです！"
                 )
