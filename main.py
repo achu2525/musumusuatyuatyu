@@ -4,6 +4,7 @@ import os
 import time
 from collections import defaultdict
 import datetime
+import re
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -13,22 +14,18 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ユーザー管理
-message_history = defaultdict(list)  # {user_id: [timestamps]}
-warning_count = defaultdict(int)     # {user_id: 警告回数}
+message_history = defaultdict(list)
+warning_count = defaultdict(int)
 
 TIMEOUT_DURATION = 300  # 秒（5分）
-REPEAT_THRESHOLD = 5    # 文字連続回数
-SPAM_COUNT = 5          # 連投回数
-SPAM_INTERVAL = 3       # 秒
+REPEAT_THRESHOLD = 5
+SPAM_COUNT = 5
+SPAM_INTERVAL = 3  # 秒
 
-def has_repeated_char(content, threshold=REPEAT_THRESHOLD):
-    """文章内で同じ文字が threshold 回以上出現したら True"""
-    counts = {}
-    for c in content:
-        counts[c] = counts.get(c, 0) + 1
-        if counts[c] >= threshold:
-            return True
-    return False
+def find_repeated_substrings(content, threshold=REPEAT_THRESHOLD):
+    """文字が threshold 回以上連続している部分を返す"""
+    pattern = re.compile(r"(.)\1{" + str(threshold-1) + r",}")
+    return pattern.findall(content)
 
 @bot.event
 async def on_ready():
@@ -43,50 +40,54 @@ async def on_message(message):
     now = time.time()
     content = message.content
 
+    spam_detected = False
+    reason = None
+
     # ------------------------------
-    # メッセージ履歴更新（連投判定用）
+    # 文字連続判定
+    # ------------------------------
+    repeated_chars = find_repeated_substrings(content)
+    if repeated_chars:
+        spam_detected = True
+        reason = "文字連続"
+
+    # ------------------------------
+    # 連投判定
     # ------------------------------
     message_history[user_id].append(now)
     message_history[user_id] = [t for t in message_history[user_id] if now - t <= SPAM_INTERVAL]
+    if len(message_history[user_id]) >= SPAM_COUNT:
+        spam_detected = True
+        if not reason:
+            reason = "連投"
 
     # ------------------------------
-    # スパム判定
+    # スパム検出時
     # ------------------------------
-    spam_detected = has_repeated_char(content) or len(message_history[user_id]) >= SPAM_COUNT
-
     if spam_detected:
-        # メッセージ削除
         try:
             await message.delete()
         except (discord.Forbidden, discord.NotFound):
             pass
 
-        # 警告・タイムアウト処理（絶対に1回だけ）
+        # 警告は1回だけ
         if warning_count[user_id] == 0:
-            # 1回目警告
             warning_count[user_id] = 1
-            await message.channel.send(
-                f"⚠️ {message.author.mention} 次にスパムを行うと5分間のタイムアウトです！"
-            )
+            warn_msg = f"⚠️ {message.author.mention} 次にスパムを行うと5分間のタイムアウトです！"
         else:
-            # 2回目 → タイムアウト
             warning_count[user_id] = 0
             member = message.author
             try:
                 timeout_until = discord.utils.utcnow() + datetime.timedelta(seconds=TIMEOUT_DURATION)
                 await member.timeout(timeout_until)
-                await message.channel.send(
-                    f"⚠️ {member.mention} 5分間タイムアウトです！"
-                )
+                warn_msg = f"⚠️ {member.mention} 5分間タイムアウトです！"
             except discord.Forbidden:
-                await message.channel.send(
-                    f"⚠️ {member.mention} タイムアウトに失敗しました。権限を確認してください。"
-                )
-        return  # ここで処理を終えて二重警告を防ぐ
+                warn_msg = f"⚠️ {member.mention} タイムアウトに失敗しました。権限を確認してください。"
 
-    # ------------------------------
-    # 通常のコマンド処理
-    # ------------------------------
+        # 警告メッセージ送信（必ず一回だけ）
+        await message.channel.send(warn_msg)
+        return
+
     await bot.process_commands(message)
 
 bot.run(os.getenv("BOT_TOKEN"))
