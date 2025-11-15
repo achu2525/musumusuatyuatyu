@@ -37,8 +37,13 @@ async def on_message(message):
         return
 
     user_id = message.author.id
-    now = time.time()
     content = message.content
+    now = time.time()
+
+    # ------------------------------
+    # 発言時に警告リセット（タイムアウト解除後）
+    # ------------------------------
+    warning_count[user_id] = warning_count.get(user_id, 0)
 
     spam_detected = False
 
@@ -79,7 +84,7 @@ async def on_message(message):
             member = message.author
             try:
                 timeout_until = discord.utils.utcnow() + datetime.timedelta(seconds=TIMEOUT_DURATION)
-                await member.timeout(timeout_until)
+                await member.timeout(timeout_until)  # 公式タイムアウト
                 await message.channel.send(
                     f"⚠️ {member.mention} 5分間タイムアウトです！"
                 )
