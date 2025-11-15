@@ -48,6 +48,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # Bot起動
-bot.run("BOT_TOKEN")
+bot.run(os.getenv("BOT_TOKEN"))
+
 
 
