@@ -2,8 +2,8 @@ import discord
 from discord.ext import commands
 import time
 import os
-from collections import defaultdict
 import datetime
+from collections import defaultdict
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -12,9 +12,7 @@ intents.members = True  # タイムアウトに必要
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ------------------------------
 # ユーザー管理
-# ------------------------------
 message_history = defaultdict(list)  # {user_id: [timestamps]}
 warning_count = defaultdict(int)     # {user_id: 警告回数}
 timeout_users = {}                   # {user_id: timeout_end_timestamp}
@@ -98,7 +96,7 @@ async def on_message(message):
             member = message.author
             try:
                 timeout_until = datetime.datetime.utcnow() + datetime.timedelta(seconds=TIMEOUT_DURATION)
-                await member.timeout(until=timeout_until)
+                await member.timeout(timeout_until)  # 位置引数で渡す
                 timeout_users[user_id] = now + TIMEOUT_DURATION
                 await message.channel.send(f"⚠️ {member.mention} 5分間タイムアウトです！")
             except discord.Forbidden:
